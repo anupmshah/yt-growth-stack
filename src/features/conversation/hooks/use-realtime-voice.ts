@@ -1,18 +1,16 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ConnectionState, ConversationMessage, MicrophonePermission, PendingToolApproval, RealtimeEvent, RealtimeSessionResponse, RealtimeWorkspaceContext } from "../types/realtime";
+import { researchResultView, storedResearchResultView } from "../research-result";
+import type { ResearchResultView } from "../research-result";
 
 const DEFAULT_MODEL="gpt-realtime-2.1";
 const approvalTools=new Set(["create_research","cancel_research"]);
 const toolLabels:Record<string,string>={create_research:"Start a paid scraper research run",cancel_research:"Cancel the current research run",search_youtube:"Search official YouTube metadata",get_research_status:"Check research status",collect_research_evidence:"Collect completed evidence"};
 function sessionCredential(payload:RealtimeSessionResponse){if(typeof payload.client_secret==="string")return payload.client_secret;return payload.client_secret?.value??payload.value??payload.ephemeral_key}
 function messageId(prefix:string){return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`}
-type ResearchSourceView={title:string|null;sourceUrl:string;views:number|null;channel:string|null};
-type ResearchResultView={status:string;sourceCount:number;sources:ResearchSourceView[];opportunities:Array<{id:string;title:string;rationale:string;score:number}>};
-function researchResultView(payload:unknown):ResearchResultView|null{if(!payload||typeof payload!=="object")return null;const result=(payload as {result?:unknown}).result;if(!result||typeof result!=="object")return null;const record=result as {status?:unknown;evidence?:unknown;opportunities?:unknown};const opportunities=Array.isArray(record.opportunities)?record.opportunities.flatMap(value=>{if(!value||typeof value!=="object")return[];const item=value as Record<string,unknown>;return typeof item.id==="string"&&typeof item.title==="string"&&typeof item.rationale==="string"&&typeof item.score==="number"?[{id:item.id,title:item.title,rationale:item.rationale,score:item.score}]:[]}):[];const sources=Array.isArray(record.evidence)?record.evidence.flatMap(value=>{if(!value||typeof value!=="object")return[];const item=value as Record<string,unknown>;const metrics=item.metrics&&typeof item.metrics==="object"?item.metrics as Record<string,unknown>:{};if(typeof item.sourceUrl!=="string")return[];return[{title:typeof item.title==="string"?item.title:null,sourceUrl:item.sourceUrl,views:typeof metrics.views==="number"?metrics.views:null,channel:typeof metrics.channel==="string"?metrics.channel:null}]}):[];return{status:typeof record.status==="string"?record.status:"completed",sourceCount:sources.length,sources,opportunities}}
-
 export function useRealtimeVoice(workspace:RealtimeWorkspaceContext|null=null){
-  const [connectionState,setConnectionState]=useState<ConnectionState>("idle");const [researchResult,setResearchResult]=useState<ResearchResultView|null>(null);const [permission,setPermission]=useState<MicrophonePermission>("prompt");const [isTalking,setIsTalking]=useState(false);const [isAgentSpeaking,setIsAgentSpeaking]=useState(false);const [liveTranscript,setLiveTranscript]=useState("");const [messages,setMessages]=useState<ConversationMessage[]>([]);const [error,setError]=useState<string|null>(null);const [pendingApproval,setPendingApproval]=useState<PendingToolApproval|null>(null);const [toolStatus,setToolStatus]=useState<string|null>(null);
+  const [connectionState,setConnectionState]=useState<ConnectionState>("idle");const [researchResult,setResearchResult]=useState<ResearchResultView|null>(null);const [researchResultLoading,setResearchResultLoading]=useState(false);const [researchResultError,setResearchResultError]=useState<string|null>(null);const [permission,setPermission]=useState<MicrophonePermission>("prompt");const [isTalking,setIsTalking]=useState(false);const [isAgentSpeaking,setIsAgentSpeaking]=useState(false);const [liveTranscript,setLiveTranscript]=useState("");const [messages,setMessages]=useState<ConversationMessage[]>([]);const [error,setError]=useState<string|null>(null);const [pendingApproval,setPendingApproval]=useState<PendingToolApproval|null>(null);const [toolStatus,setToolStatus]=useState<string|null>(null);
   const peerRef=useRef<RTCPeerConnection|null>(null);const channelRef=useRef<RTCDataChannel|null>(null);const streamRef=useRef<MediaStream|null>(null);const audioRef=useRef<HTMLAudioElement|null>(null);const assistantDraftRef=useRef("");const speechDetectedRef=useRef(false);
   const persistMessage=useCallback(async(role:"user"|"assistant",content:string)=>{if(!workspace||!content.trim())return;try{await fetch("/api/workspace/messages",{method:"POST",headers:{"content-type":"application/json",authorization:`Bearer ${workspace.accessToken}`},body:JSON.stringify({conversationId:workspace.conversationId,kind:role,content:content.trim(),clientId:crypto.randomUUID()})});}catch{/* Keep the live session usable if persistence is temporarily unavailable. */}},[workspace]);
   const sendEvent=useCallback((event:Record<string,unknown>)=>{const channel=channelRef.current;if(channel?.readyState==="open")channel.send(JSON.stringify(event));},[]);
@@ -61,5 +59,20 @@ export function useRealtimeVoice(workspace:RealtimeWorkspaceContext|null=null){
   const rejectTool=useCallback(()=>{if(!pendingApproval)return;returnToolOutput(pendingApproval.callId,{error:"The user did not approve this action."});setPendingApproval(null);setToolStatus("Action declined");},[pendingApproval,returnToolOutput]);
   useEffect(()=>disconnect,[disconnect]);
   useEffect(()=>{if(!workspace)return;let cancelled=false;void fetch(`/api/workspace/conversations/${workspace.conversationId}`,{headers:{authorization:`Bearer ${workspace.accessToken}`}}).then(async response=>response.ok?response.json():null).then((payload:unknown)=>{if(cancelled||!payload||typeof payload!=="object")return;const values=(payload as {messages?:unknown}).messages;if(!Array.isArray(values))return;setMessages(values.flatMap((value,index)=>{if(!value||typeof value!=="object")return[];const item=value as Record<string,unknown>;const role=item.kind??item.role;const message=item.content??item.text;if((role!=="user"&&role!=="assistant")||typeof message!=="string")return[];return[{id:typeof item.id==="string"?item.id:`stored-${index}`,role,text:message,status:"complete" as const}];}));}).catch(()=>{});return()=>{cancelled=true};},[workspace]);
-  return{connectionState,permission,isTalking,isAgentSpeaking,liveTranscript,messages,error,pendingApproval,toolStatus,researchResult,connect,disconnect,startTalking,stopTalking,interrupt,sendText,approveTool,rejectTool};
+  useEffect(()=>{
+    const accessToken=workspace?.accessToken;const projectId=workspace?.projectId;let cancelled=false;
+    if(!accessToken||!projectId){queueMicrotask(()=>{if(!cancelled){setResearchResult(null);setResearchResultLoading(false);setResearchResultError(null);}});return()=>{cancelled=true};}
+    queueMicrotask(()=>{if(!cancelled){setResearchResultLoading(true);setResearchResultError(null);}});
+    const query=new URLSearchParams({projectId,limit:"25"});
+    void Promise.all([
+      fetch(`/api/workspace/sources?${query}`,{headers:{authorization:`Bearer ${accessToken}`}}),
+      fetch(`/api/workspace/opportunities?${query}`,{headers:{authorization:`Bearer ${accessToken}`}}),
+    ]).then(async([sourcesResponse,opportunitiesResponse])=>{
+      if(!sourcesResponse.ok||!opportunitiesResponse.ok)throw new Error("Stored evidence could not be loaded.");
+      const [sourcesPayload,opportunitiesPayload]:unknown[]=await Promise.all([sourcesResponse.json(),opportunitiesResponse.json()]);
+      if(!cancelled)setResearchResult(storedResearchResultView(sourcesPayload,opportunitiesPayload));
+    }).catch(cause=>{if(!cancelled)setResearchResultError(cause instanceof Error?cause.message:"Stored evidence could not be loaded.");}).finally(()=>{if(!cancelled)setResearchResultLoading(false);});
+    return()=>{cancelled=true};
+  },[workspace?.accessToken,workspace?.projectId]);
+  return{connectionState,permission,isTalking,isAgentSpeaking,liveTranscript,messages,error,pendingApproval,toolStatus,researchResult,researchResultLoading,researchResultError,connect,disconnect,startTalking,stopTalking,interrupt,sendText,approveTool,rejectTool};
 }
