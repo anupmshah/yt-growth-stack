@@ -30,7 +30,7 @@ export function useRealtimeVoice(workspace:RealtimeWorkspaceContext|null=null){
           setToolStatus(`Research ${status}...`);
           if(status==="queued"||status==="running")continue;
           if(status==="succeeded"){
-            setToolStatus("Collecting and analyzing evidence...");const collectedPayload=await invoke("collect_research_evidence",{researchId});const view=researchResultView(collectedPayload);if(view){setResearchResult(view);const update={researchId,status:view.status,sources:view.sources,opportunities:view.opportunities};sendEvent({type:"conversation.item.create",item:{type:"message",role:"user",content:[{type:"input_text",text:`Automated research update. Use only this stored evidence and cite its source URLs: ${JSON.stringify(update)}`}]}});sendEvent({type:"response.create"});setToolStatus(`Research complete: ${view.sourceCount} sources analyzed`);}return;
+            setToolStatus("Collecting and analyzing evidence...");const collectedPayload=await invoke("collect_research_evidence",{researchId});const view=researchResultView(collectedPayload);if(view){setResearchResult(view);const update={researchId,status:view.status,analysis:view.analysis,sources:view.sources,opportunities:view.opportunities};sendEvent({type:"conversation.item.create",item:{type:"message",role:"user",content:[{type:"input_text",text:`Automated research update. Use only this stored evidence and cite its source URLs: ${JSON.stringify(update)}`}]}});sendEvent({type:"response.create"});setToolStatus(`Research complete: ${view.sourceCount} sources analyzed`);}return;
           }
           setToolStatus(`Research ${status}`);return;
         }

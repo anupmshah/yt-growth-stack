@@ -48,3 +48,9 @@ test("analysis returns no opportunity when evidence is insufficient", () => {
 
   assert.deepEqual(analyzeEvidence(evidence), []);
 });
+
+test("normalization expands compact YouTube metrics", () => {
+  const [document] = normalizeEvidence("apify", [{ url: "https://youtube.com/watch?v=compact", title: "Compact metrics", viewCount: "1.2M", likes: "4.5K" }], "2026-01-01T00:00:00.000Z");
+  assert.equal(document?.metrics.views, 1_200_000);
+  assert.equal(document?.metrics.likes, 4_500);
+});

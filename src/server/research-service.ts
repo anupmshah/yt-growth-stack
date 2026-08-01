@@ -29,5 +29,22 @@ export class ResearchService {
   async cancel(id: string, confirmed: boolean) { if (!confirmed) throw new AppError("INVALID_REQUEST", "Cancellation requires confirmation", 400); const record = await this.status(id); if (record.status === "cancelled") return record; if (["succeeded", "failed"].includes(record.status)) throw new AppError("CONFLICT", `Cannot cancel a ${record.status} run`, 409); if (record.provider === "apify") await this.apify.cancel(record.providerJobId); else await this.firecrawl.cancel(record.providerJobId); const updated = { ...record, status: "cancelled" as const, updatedAt: new Date().toISOString() }; await this.store.save(updated); return updated; }
 }
 
-export const createResearchSchema = z.discriminatedUnion("provider", [z.object({ provider: z.literal("apify"), channels: z.array(z.string().url()).min(1).max(25), maxVideos: z.number().int().min(1).max(500).default(10), confirmed: z.literal(true) }), z.object({ provider: z.literal("firecrawl"), urls: z.array(z.string().url()).min(1).max(100), confirmed: z.literal(true) })]);
+const youtubeChannelTargetSchema = z.string().trim().min(1).transform((value, context) => {
+  if (/^@[A-Za-z0-9._-]+$/.test(value)) return `https://www.youtube.com/${value}`;
+  const parsed = z.string().url().safeParse(value);
+  if (!parsed.success) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Provide a YouTube channel URL or @handle, not an individual video link." });
+    return z.NEVER;
+  }
+  const url = new URL(parsed.data);
+  const youtubeHost = /(^|\.)youtube\.com$/i.test(url.hostname);
+  const channelPath = /^\/(?:@[^/]+|channel\/[^/]+|c\/[^/]+|user\/[^/]+)\/?$/i.test(url.pathname);
+  if (!youtubeHost || !channelPath) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "Provide a YouTube channel URL or @handle, not an individual video link." });
+    return z.NEVER;
+  }
+  url.search = ""; url.hash = "";
+  return url.toString().replace(/\/$/, "");
+});
 
+export const createResearchSchema = z.discriminatedUnion("provider", [z.object({ provider: z.literal("apify"), channels: z.array(youtubeChannelTargetSchema).min(1).max(25), maxVideos: z.number().int().min(3).max(500).default(10), confirmed: z.literal(true) }), z.object({ provider: z.literal("firecrawl"), urls: z.array(z.string().url()).min(1).max(100), confirmed: z.literal(true) })]);

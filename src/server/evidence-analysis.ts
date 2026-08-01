@@ -48,8 +48,12 @@ function firstString(...values: unknown[]) {
 function number(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value) && value >= 0) return value;
   if (typeof value === "string") {
-    const parsed = Number(value.replace(/[^0-9.]/g, ""));
-    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+    const compact = value.trim().replace(/,/g, "").match(/^([0-9]+(?:\.[0-9]+)?)\s*([KMB])?$/i);
+    if (compact) {
+      const multiplier = compact[2]?.toUpperCase() === "K" ? 1_000 : compact[2]?.toUpperCase() === "M" ? 1_000_000 : compact[2]?.toUpperCase() === "B" ? 1_000_000_000 : 1;
+      const parsed = Number(compact[1]) * multiplier;
+      if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+    }
   }
   return undefined;
 }
