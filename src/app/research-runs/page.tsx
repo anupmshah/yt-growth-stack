@@ -1,0 +1,1 @@
+import { WorkspaceShell } from "@/features/navigation/workspace-shell";import { ResearchRunsPage } from "@/features/workspace-data/workspace-pages";export default function Page(){return <WorkspaceShell><ResearchRunsPage/></WorkspaceShell>}

@@ -2,7 +2,7 @@
 
 A voice-first, evidence-backed YouTube competitor research and idea-generation agent. Speak or type a research goal; the agent coordinates Apify, Firecrawl, and Supabase, then returns cited opportunities in a conversational workspace.
 
-> Status: open-source foundation. The interface, contracts, schema, safety boundaries, and delivery system are implemented. Live provider calls require your own credentials and provider-specific job configuration.
+> Status: working alpha. Voice and text conversation, authenticated research tools, connected workspace navigation, durable job/source/idea APIs, and the Supabase schema are implemented. Firecrawl and official YouTube search still require credentials, and migration 005 must be reviewed and applied before saved ideas and idempotent message persistence are enabled.
 
 ## Product experience
 
@@ -113,7 +113,7 @@ Rules: retries are bounded; a retry must change strategy; database migrations, s
 
 The repository currently includes a functional WebRTC voice and text workspace; the tweakcn Caffeine theme; short-lived OpenAI Realtime credentials; validated YouTube, Apify, and Firecrawl tools; bounded retries and timeouts; mocked integration tests; and Supabase RLS with durable research state, events, sources, and opportunities.
 
-Live voice and provider calls require credentials in .env.local. Supabase migrations must be applied before persistence works end to end. The browser-side Realtime approval bridge still needs authenticated project and conversation context. Demo research-desk rows are explicitly labeled and are not live provider results.
+Live OpenAI Realtime and Apify have been verified with configured credentials. Conversation, Research Runs, Saved Ideas, and Sources now have connected routes backed by authenticated workspace APIs; New Research creates a durable conversation. Migrations 001-004 are deployed in the configured project, while additive migration 005 remains an explicit rollout gate for opportunity workflow state, message idempotency, and listing indexes. Firecrawl and official YouTube search remain credential-dependent. Demo research-desk rows are explicitly labeled and disappear when live evidence is collected.
 ## Build roadmap
 
 ```mermaid

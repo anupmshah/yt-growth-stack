@@ -1,0 +1,1 @@
+import { WorkspaceShell } from "@/features/navigation/workspace-shell";import { ResearchRunDetail } from "@/features/workspace-data/research-run-detail";export default async function Page({params}:{params:Promise<{researchId:string}>}){const {researchId}=await params;return <WorkspaceShell><ResearchRunDetail researchId={researchId}/></WorkspaceShell>}
