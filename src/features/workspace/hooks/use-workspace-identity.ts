@@ -19,7 +19,7 @@ export function useWorkspaceIdentity() {
     if (projects.error) { setState(current=>({...current,loading:false,user:session.user,error:"Could not load your workspace."})); return; }
     const project = projects.data?.[0];
     if (!project) { setState(current=>({...current,loading:false,user:session.user,context:null,projectName:null,error:null})); return; }
-    const conversations = await client.from("conversations").select("id").eq("project_id",project.id).order("created_at",{ascending:true}).limit(1);
+    const conversations = await client.from("conversations").select("id").eq("project_id",project.id).order("updated_at",{ascending:false}).order("id",{ascending:false}).limit(1);
     if (conversations.error) { setState(current=>({...current,loading:false,user:session.user,error:"Could not load the project conversation."})); return; }
     let conversation = conversations.data?.[0];
     if (!conversation) {

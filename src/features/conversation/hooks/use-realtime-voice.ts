@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ConnectionState, ConversationMessage, MicrophonePermission, PendingToolApproval, RealtimeEvent, RealtimeSessionResponse, RealtimeWorkspaceContext } from "../types/realtime";
 import { researchResultView, storedResearchResultView } from "../research-result";
 import type { ResearchResultView } from "../research-result";
+import { storedConversationView } from "../conversation-state";
 
 const DEFAULT_MODEL="gpt-realtime-2.1";
 const approvalTools=new Set(["create_research","cancel_research"]);
@@ -10,7 +11,7 @@ const toolLabels:Record<string,string>={create_research:"Start a paid scraper re
 function sessionCredential(payload:RealtimeSessionResponse){if(typeof payload.client_secret==="string")return payload.client_secret;return payload.client_secret?.value??payload.value??payload.ephemeral_key}
 function messageId(prefix:string){return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`}
 export function useRealtimeVoice(workspace:RealtimeWorkspaceContext|null=null){
-  const [connectionState,setConnectionState]=useState<ConnectionState>("idle");const [researchResult,setResearchResult]=useState<ResearchResultView|null>(null);const [researchResultLoading,setResearchResultLoading]=useState(false);const [researchResultError,setResearchResultError]=useState<string|null>(null);const [permission,setPermission]=useState<MicrophonePermission>("prompt");const [isTalking,setIsTalking]=useState(false);const [isAgentSpeaking,setIsAgentSpeaking]=useState(false);const [liveTranscript,setLiveTranscript]=useState("");const [messages,setMessages]=useState<ConversationMessage[]>([]);const [error,setError]=useState<string|null>(null);const [pendingApproval,setPendingApproval]=useState<PendingToolApproval|null>(null);const [toolStatus,setToolStatus]=useState<string|null>(null);
+  const [connectionState,setConnectionState]=useState<ConnectionState>("idle");const [conversationTitle,setConversationTitle]=useState<string|null>(null);const [researchResult,setResearchResult]=useState<ResearchResultView|null>(null);const [researchResultLoading,setResearchResultLoading]=useState(false);const [researchResultError,setResearchResultError]=useState<string|null>(null);const [permission,setPermission]=useState<MicrophonePermission>("prompt");const [isTalking,setIsTalking]=useState(false);const [isAgentSpeaking,setIsAgentSpeaking]=useState(false);const [liveTranscript,setLiveTranscript]=useState("");const [messages,setMessages]=useState<ConversationMessage[]>([]);const [error,setError]=useState<string|null>(null);const [pendingApproval,setPendingApproval]=useState<PendingToolApproval|null>(null);const [toolStatus,setToolStatus]=useState<string|null>(null);
   const peerRef=useRef<RTCPeerConnection|null>(null);const channelRef=useRef<RTCDataChannel|null>(null);const streamRef=useRef<MediaStream|null>(null);const audioRef=useRef<HTMLAudioElement|null>(null);const assistantDraftRef=useRef("");const speechDetectedRef=useRef(false);
   const persistMessage=useCallback(async(role:"user"|"assistant",content:string)=>{if(!workspace||!content.trim())return;try{await fetch("/api/workspace/messages",{method:"POST",headers:{"content-type":"application/json",authorization:`Bearer ${workspace.accessToken}`},body:JSON.stringify({conversationId:workspace.conversationId,kind:role,content:content.trim(),clientId:crypto.randomUUID()})});}catch{/* Keep the live session usable if persistence is temporarily unavailable. */}},[workspace]);
   const sendEvent=useCallback((event:Record<string,unknown>)=>{const channel=channelRef.current;if(channel?.readyState==="open")channel.send(JSON.stringify(event));},[]);
@@ -58,7 +59,15 @@ export function useRealtimeVoice(workspace:RealtimeWorkspaceContext|null=null){
   const approveTool=useCallback(()=>{if(!pendingApproval)return;const call=pendingApproval;const values=call.arguments&&typeof call.arguments==="object"?call.arguments as Record<string,unknown>:{};setPendingApproval(null);void executeTool({...call,arguments:{...values,confirmed:true}});},[pendingApproval,executeTool]);
   const rejectTool=useCallback(()=>{if(!pendingApproval)return;returnToolOutput(pendingApproval.callId,{error:"The user did not approve this action."});setPendingApproval(null);setToolStatus("Action declined");},[pendingApproval,returnToolOutput]);
   useEffect(()=>disconnect,[disconnect]);
-  useEffect(()=>{if(!workspace)return;let cancelled=false;void fetch(`/api/workspace/conversations/${workspace.conversationId}`,{headers:{authorization:`Bearer ${workspace.accessToken}`}}).then(async response=>response.ok?response.json():null).then((payload:unknown)=>{if(cancelled||!payload||typeof payload!=="object")return;const values=(payload as {messages?:unknown}).messages;if(!Array.isArray(values))return;setMessages(values.flatMap((value,index)=>{if(!value||typeof value!=="object")return[];const item=value as Record<string,unknown>;const role=item.kind??item.role;const message=item.content??item.text;if((role!=="user"&&role!=="assistant")||typeof message!=="string")return[];return[{id:typeof item.id==="string"?item.id:`stored-${index}`,role,text:message,status:"complete" as const}];}));}).catch(()=>{});return()=>{cancelled=true};},[workspace]);
+  useEffect(()=>{
+    const accessToken=workspace?.accessToken;const conversationId=workspace?.conversationId;let cancelled=false;
+    queueMicrotask(()=>{if(!cancelled){setMessages([]);setConversationTitle(null);}});
+    if(!accessToken||!conversationId)return()=>{cancelled=true};
+    void fetch(`/api/workspace/conversations/${conversationId}`,{headers:{authorization:`Bearer ${accessToken}`}}).then(async response=>response.ok?response.json():null).then((payload:unknown)=>{
+      if(cancelled)return;const view=storedConversationView(payload);if(!view)return;setMessages(view.messages);setConversationTitle(view.title);
+    }).catch(()=>{});
+    return()=>{cancelled=true};
+  },[workspace?.accessToken,workspace?.conversationId]);
   useEffect(()=>{
     const accessToken=workspace?.accessToken;const projectId=workspace?.projectId;let cancelled=false;
     if(!accessToken||!projectId){queueMicrotask(()=>{if(!cancelled){setResearchResult(null);setResearchResultLoading(false);setResearchResultError(null);}});return()=>{cancelled=true};}
@@ -74,5 +83,5 @@ export function useRealtimeVoice(workspace:RealtimeWorkspaceContext|null=null){
     }).catch(cause=>{if(!cancelled)setResearchResultError(cause instanceof Error?cause.message:"Stored evidence could not be loaded.");}).finally(()=>{if(!cancelled)setResearchResultLoading(false);});
     return()=>{cancelled=true};
   },[workspace?.accessToken,workspace?.projectId]);
-  return{connectionState,permission,isTalking,isAgentSpeaking,liveTranscript,messages,error,pendingApproval,toolStatus,researchResult,researchResultLoading,researchResultError,connect,disconnect,startTalking,stopTalking,interrupt,sendText,approveTool,rejectTool};
+  return{connectionState,conversationTitle,permission,isTalking,isAgentSpeaking,liveTranscript,messages,error,pendingApproval,toolStatus,researchResult,researchResultLoading,researchResultError,connect,disconnect,startTalking,stopTalking,interrupt,sendText,approveTool,rejectTool};
 }
