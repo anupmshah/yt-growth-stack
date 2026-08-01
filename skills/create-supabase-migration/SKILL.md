@@ -9,4 +9,6 @@ description: Create a safe append-only Supabase migration with explicit data, RL
 4. Enable RLS and add least-privilege policies for user-owned tables.
 5. Consider locks, existing data, defaults, nullability, and indexes.
 6. Document rollout and rollback.
-7. Inspect generated SQL and run the relevant database checks before PR.
+7. Reset a disposable local database and run `tests/platform/schema_contract.sql`.
+8. Test owner, cross-tenant, and anonymous JWTs; service-role tests do not verify RLS.
+9. Include commands/results in the PR and prefer forward fixes over destructive rollback.

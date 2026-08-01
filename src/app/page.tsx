@@ -1,5 +1,5 @@
-﻿import { VoiceWorkspace } from "@/features/conversation/components/voice-workspace";
+﻿import { RealtimeVoiceWorkspace } from "@/features/conversation/components/realtime-voice-workspace";
 
 export default function Home() {
-  return <VoiceWorkspace />;
+  return <RealtimeVoiceWorkspace />;
 }

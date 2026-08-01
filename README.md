@@ -1,4 +1,4 @@
-﻿# YT Growth Stack
+# YT Growth Stack
 
 A voice-first, evidence-backed YouTube competitor research and idea-generation agent. Speak or type a research goal; the agent coordinates Apify, Firecrawl, and Supabase, then returns cited opportunities in a conversational workspace.
 
@@ -109,6 +109,11 @@ flowchart LR
 
 Rules: retries are bounded; a retry must change strategy; database migrations, secrets, production cost, destructive actions, and merges require human gates; “done” is a claim supported by current evidence.
 
+## Current implementation status
+
+The repository currently includes a functional WebRTC voice and text workspace; the tweakcn Caffeine theme; short-lived OpenAI Realtime credentials; validated YouTube, Apify, and Firecrawl tools; bounded retries and timeouts; mocked integration tests; and Supabase RLS with durable research state, events, sources, and opportunities.
+
+Live voice and provider calls require credentials in .env.local. Supabase migrations must be applied before persistence works end to end. The browser-side Realtime approval bridge still needs authenticated project and conversation context. Demo research-desk rows are explicitly labeled and are not live provider results.
 ## Build roadmap
 
 ```mermaid

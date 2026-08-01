@@ -1,10 +1,10 @@
-﻿# AGENTS.md
+# AGENTS.md
 
 ## Mission
 Build YT Growth Stack as a voice-first YouTube research agent whose recommendations are traceable to stored evidence.
 
 ## Mental model
-The UI expresses conversation and job state. The server owns authorization and tool execution. Integrations translate provider APIs into domain-safe contracts. Supabase owns durable data and RLS. No provider response is trusted until normalized and associated with provenance.
+The UI expresses conversation and job state. The server owns authorization and tool execution. Integrations translate provider APIs into domain-safe contracts. Supabase owns durable data and RLS. Authenticated tool routes use SupabaseResearchStore; memory storage is a test/development fallback only. No provider response is trusted until normalized and associated with provenance.
 
 ## Read before changing
 1. Read this file.
