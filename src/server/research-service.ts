@@ -1,11 +1,12 @@
-﻿import { z } from "zod";
+import { z } from "zod";
 import { ApifyAdapter } from "@/integrations/apify/adapter";
 import { FirecrawlAdapter } from "@/integrations/firecrawl/adapter";
 import { AppError } from "@/server/errors";
+import { analyzeEvidence, normalizeEvidence, type EvidenceDocument, type ResearchOpportunity } from "@/server/evidence-analysis";
 
 export type ResearchStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
 export type ResearchContext = { ownerId: string; projectId: string; conversationId: string };
-export type ResearchRecord = ResearchContext & { id: string; provider: "apify" | "firecrawl"; providerJobId: string; datasetId?: string; status: ResearchStatus; input: unknown; evidence?: unknown[]; createdAt: string; updatedAt: string };
+export type ResearchRecord = ResearchContext & { id: string; provider: "apify" | "firecrawl"; providerJobId: string; datasetId?: string; status: ResearchStatus; input: unknown; evidence?: EvidenceDocument[]; opportunities?: ResearchOpportunity[]; createdAt: string; updatedAt: string };
 export interface ResearchStore { save(record: ResearchRecord): Promise<void>; get(ownerId: string, id: string): Promise<ResearchRecord | null>; }
 class MemoryResearchStore implements ResearchStore {
   private records = new Map<string, ResearchRecord>();
@@ -24,7 +25,7 @@ export class ResearchService {
     await this.store.save(record); return record;
   }
   async status(id: string) { const record = await this.store.get(this.context.ownerId, id); if (!record) throw new AppError("NOT_FOUND", "Research run was not found", 404); if (!["running", "queued"].includes(record.status)) return record; const providerState = record.provider === "apify" ? await this.apify.status(record.providerJobId) : { status: await this.firecrawl.status(record.providerJobId) }; const updated: ResearchRecord = { ...record, status: providerState.status as ResearchStatus, datasetId: "datasetId" in providerState ? providerState.datasetId : record.datasetId, updatedAt: new Date().toISOString() }; await this.store.save(updated); return updated; }
-  async collect(id: string) { const record = await this.status(id); if (["cancelled", "failed"].includes(record.status)) throw new AppError("CONFLICT", `Cannot collect a ${record.status} run`, 409); const evidence = record.provider === "apify" ? (await this.apify.result(record.providerJobId, record.datasetId)).items : (await this.firecrawl.result(record.providerJobId)).documents; const updated = { ...record, status: "succeeded" as const, evidence, updatedAt: new Date().toISOString() }; await this.store.save(updated); return updated; }
+  async collect(id: string) { const record = await this.status(id); if (record.status !== "succeeded") throw new AppError("CONFLICT", `Cannot collect a ${record.status} run`, 409, ["queued", "running"].includes(record.status)); const rawEvidence = record.provider === "apify" ? (await this.apify.result(record.providerJobId, record.datasetId)).items : (await this.firecrawl.result(record.providerJobId)).documents; const evidence = normalizeEvidence(record.provider, rawEvidence); if (!evidence.length) throw new AppError("UPSTREAM_TERMINAL", "The provider completed without usable source URLs", 502); const opportunities = analyzeEvidence(evidence); const updated = { ...record, evidence, opportunities, updatedAt: new Date().toISOString() }; await this.store.save(updated); return updated; }
   async cancel(id: string, confirmed: boolean) { if (!confirmed) throw new AppError("INVALID_REQUEST", "Cancellation requires confirmation", 400); const record = await this.status(id); if (record.provider === "apify") await this.apify.cancel(record.providerJobId); else await this.firecrawl.cancel(record.providerJobId); const updated = { ...record, status: "cancelled" as const, updatedAt: new Date().toISOString() }; await this.store.save(updated); return updated; }
 }
 
