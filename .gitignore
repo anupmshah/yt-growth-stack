@@ -47,3 +47,5 @@ next-env.d.ts
 
 # local preview logs
 .codex-dev.*.log
+.vercel
+.env*
