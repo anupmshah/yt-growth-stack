@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { AGENT_INSTRUCTIONS, REALTIME_MODEL } from "@/integrations/openai/config";
+import { AGENT_INSTRUCTIONS, INPUT_TRANSCRIPTION, REALTIME_MODEL } from "@/integrations/openai/config";
 import { env } from "@/shared/config/env";
 import { errorResponse, AppError } from "@/server/errors";
 import { fetchJson } from "@/server/http";
@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     await authenticateRequest(request);
     if (!env.OPENAI_API_KEY) throw new AppError("UNCONFIGURED", "OpenAI Realtime is not configured", 503);
     const text = await request.text(); let rawOptions: unknown; try { rawOptions = text ? JSON.parse(text) : undefined; } catch { throw new AppError("INVALID_REQUEST", "Request body must be valid JSON", 400); } const options = optionsSchema.parse(rawOptions);
-    const upstream = await fetchJson<ClientSecretResponse>("https://api.openai.com/v1/realtime/client_secrets", { method: "POST", headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" }, body: JSON.stringify({ session: { type: "realtime", model: REALTIME_MODEL, instructions: AGENT_INSTRUCTIONS, output_modalities: ["audio"], audio: { input: { transcription: { model: "gpt-4o-transcribe" } }, output: { voice: options.voice } }, tools: realtimeTools, tool_choice: "auto" } }) }, { timeoutMs: 10_000, retries: 1 });
+    const upstream = await fetchJson<ClientSecretResponse>("https://api.openai.com/v1/realtime/client_secrets", { method: "POST", headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" }, body: JSON.stringify({ session: { type: "realtime", model: REALTIME_MODEL, instructions: AGENT_INSTRUCTIONS, output_modalities: ["audio"], audio: { input: { transcription: INPUT_TRANSCRIPTION }, output: { voice: options.voice } }, tools: realtimeTools, tool_choice: "auto" } }) }, { timeoutMs: 10_000, retries: 1 });
     const clientSecret = upstream.value ?? upstream.client_secret?.value; const expiresAt = upstream.expires_at ?? upstream.client_secret?.expires_at;
     if (!clientSecret) throw new AppError("UPSTREAM_TERMINAL", "OpenAI returned an invalid session credential", 502);
     return NextResponse.json({ client_secret: { value: clientSecret, expires_at: expiresAt }, model: REALTIME_MODEL });
